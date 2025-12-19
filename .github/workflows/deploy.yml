@@ -64,7 +64,7 @@ jobs:
       - name: Build, Tag, and Push Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          GAR_REGISTRY: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}
+          GAR_REGISTRY: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.ECR_REPOSITORY }}
         run: |
           IMAGE_TAG=${GITHUB_REF#refs/tags/}
           echo "Target Version: $IMAGE_TAG"
@@ -87,7 +87,7 @@ jobs:
       - name: Update GitOps Manifest
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          GAR_REGISTRY: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}
+          GAR_REGISTRY: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.ECR_REPOSITORY }}
         run: |
           IMAGE_TAG=${GITHUB_REF#refs/tags/}
           
