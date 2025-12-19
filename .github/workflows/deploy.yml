@@ -6,12 +6,12 @@ on:
       - 'v*'
 
 env:
-  # 🔴 [수정] 본인 환경에 맞게 확인
-  ECR_REPOSITORY: 639242342449.dkr.ecr.ap-northeast-2.amazonaws.com/gitactions
-  GCP_PROJECT_ID: kdt2-final project-t1
+  # 🔴 [확인] 본인 설정값 유지
+  ECR_REPOSITORY: ECR_REPOSITORY: 639242342449.dkr.ecr.ap-northeast-2.amazonaws.com/gitactions
+  GCP_PROJECT_ID: kdt2-final project-t1  # <-- 여기 본인 거 확인!
   GAR_REPOSITORY: gitactions-hjh
   GCP_REGION: asia-northeast3
-  GITOPS_REPO: JEONGHO0316/my-service-ops
+  GITOPS_REPO: JEONGHO0316/team1-final-cd
 
 permissions:
   contents: read
@@ -23,7 +23,20 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. AWS 로그인 (v1 -> v2로 업데이트하여 경고 해결)
+      # ✅ [추가됨 1] Java(JDK 17) 세팅
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ✅ [추가됨 2] 실행 권한 부여 및 Maven 빌드 (jar 파일 생성)
+      - name: Build with Maven
+        run: |
+          chmod +x mvnw
+          ./mvnw clean package -DskipTests
+
+      # 1. AWS 로그인
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -48,7 +61,7 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCP_SA_KEY }}
 
-      # 3. 빌드 및 푸시
+      # 3. Docker 이미지 빌드 및 푸시
       - name: Build, Tag, and Push Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -57,7 +70,7 @@ jobs:
           IMAGE_TAG=${GITHUB_REF#refs/tags/}
           echo "Target Version: $IMAGE_TAG"
           
-          # Docker 빌드
+          # Docker 빌드 (이제 target/*.jar 파일이 있어서 성공함!)
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           
           # 태그 복사
@@ -79,7 +92,6 @@ jobs:
         run: |
           IMAGE_TAG=${GITHUB_REF#refs/tags/}
           
-          # GitOps Repo Clone
           git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ env.GITOPS_REPO }}.git cd-repo
           cd cd-repo
           
