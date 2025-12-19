@@ -7,8 +7,8 @@ on:
 
 env:
   # 🔴 [확인] 본인 설정값 유지
-  ECR_REPOSITORY: ECR_REPOSITORY: 639242342449.dkr.ecr.ap-northeast-2.amazonaws.com/gitactions
-  GCP_PROJECT_ID: kdt2-final project-t1  # <-- 여기 본인 거 확인!
+  ECR_REPOSITORY: gitactions
+  GCP_PROJECT_ID: kdt2-final-project-t1  # <-- 여기 본인 거 확인!
   GAR_REPOSITORY: gitactions-hjh
   GCP_REGION: asia-northeast3
   GITOPS_REPO: JEONGHO0316/team1-final-cd
