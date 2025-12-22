@@ -16,7 +16,7 @@ Spring Boot 애플리케이션 구조와 CI/CD 워크플로우 설정 파일이 
 .
 ├── .github/                
 │   └── workflows/          
-│       └── ci-pipeline.yaml   # ⚙️ 핵심: CI 파이프라인 (ECR / GAR 분기 처리)
+│       └── deploy.yml   # ⚙️ 핵심: CI 파이프라인 (ECR / GAR 분기 처리)
 ├── src/                    
 │   ├── main/
 │   │   ├── java/              # Backend Source Code
