@@ -1,7 +1,7 @@
 ```
 # 🚀 Petclinic Application & CI Pipeline
 
-![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen) ![Java](https://img.shields.io/badge/Java-17-orange) ![Spring Boot](https://img.shields.io/badge/SpringBoot-3.0-green) ![Docker](https://img.shields.io/badge/Docker-Multi--Cloud-blue)
+[![Multi-Cloud Deploy (AWS & GCP)](https://github.com/JEONGHO0316/team1-final-ci/actions/workflows/deploy.yml/badge.svg)](https://github.com/JEONGHO0316/team1-final-ci/actions/workflows/deploy.yml)
 
 안녕하세요! 이 저장소는 **MSA 기반 Petclinic 애플리케이션의 소스 코드**와 **Multi-Cloud CI 전략**을 담고 있습니다.
 단순한 빌드를 넘어, **운영 효율성**과 **재해 복구(DR)**를 고려하여 배포 시나리오를 이원화했습니다.
