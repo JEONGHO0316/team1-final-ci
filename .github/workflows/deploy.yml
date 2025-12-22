@@ -6,12 +6,15 @@ on:
       - 'v*'
 
 env:
-  # 🔴 [확인] 본인 설정값 유지
+  # 🔴 [설정] 리소스 이름 정의
   ECR_REPOSITORY: gitactions
-  GCP_PROJECT_ID: kdt2-final-project-t1  # <-- 여기 본인 거 확인!
+  GCP_PROJECT_ID: kdt2-final-project-t1
   GAR_REPOSITORY: gitactions-hjh
   GCP_REGION: asia-northeast3
   GITOPS_REPO: JEONGHO0316/team1-final-cd
+  
+  # 🔴 [중요] kustomization.yaml에 적어둔 가짜 이미지 이름(placeholder)과 똑같아야 함!
+  KUSTOMIZE_IMAGE_NAME: petclinic-image-placeholder 
 
 permissions:
   contents: read
@@ -23,19 +26,24 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # ✅ [추가됨 1] Java(JDK 17) 세팅
+      # 1. Java 세팅
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ✅ [추가됨 2] 실행 권한 부여 및 Maven 빌드 (jar 파일 생성)
+      # 2. Maven 빌드 (실행 권한 문제 방지 위해 chmod 추가)
       - name: Build with Maven
-        run: |          
-          mvn clean package -DskipTests
+        run: |
+          chmod +x mvnw
+          ./mvnw clean package -DskipTests
 
-      # 1. AWS 로그인
+      # 3. Kustomize 설치 (✅ 추가됨: 안전한 동작을 위해 필수)
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      # 4. AWS 로그인
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -47,7 +55,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 2. GCP 로그인
+      # 5. GCP 로그인
       - name: Google Auth
         uses: google-github-actions/auth@v1
         with:
@@ -60,30 +68,32 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCP_SA_KEY }}
 
-      # 3. Docker 이미지 빌드 및 푸시
+      # 6. Docker 빌드 & Dual Push
       - name: Build, Tag, and Push Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # GAR 주소 조합 (Region-docker.pkg.dev/ProjectID/Repo/Image)
           GAR_REGISTRY: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.ECR_REPOSITORY }}
         run: |
+          # 태그 추출 (refs/tags/v1.0.0 -> v1.0.0)
           IMAGE_TAG=${GITHUB_REF#refs/tags/}
-          echo "Target Version: $IMAGE_TAG"
-          
-          # Docker 빌드 (이제 target/*.jar 파일이 있어서 성공함!)
+          echo "🚀 Deploy Target Version: $IMAGE_TAG"
+
+          # Docker 빌드
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          
-          # 태그 복사
+
+          # GCP용 태그 생성 (복사)
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $GAR_REGISTRY:$IMAGE_TAG
-          
-          # AWS 푸시
-          echo "Pushing to AWS ECR..."
+
+          # AWS ECR 푸시
+          echo "📤 Pushing to AWS ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          
-          # GCP 푸시
-          echo "Pushing to GCP GAR..."
+
+          # GCP GAR 푸시
+          echo "📤 Pushing to GCP GAR..."
           docker push $GAR_REGISTRY:$IMAGE_TAG
 
-      # 4. GitOps Manifest 수정
+      # 7. GitOps Manifest 수정 (CD 트리거)
       - name: Update GitOps Manifest
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -91,35 +101,38 @@ jobs:
         run: |
           IMAGE_TAG=${GITHUB_REF#refs/tags/}
           
+          # GitOps 레포 클론 (GH_TOKEN 필수!)
           git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ env.GITOPS_REPO }}.git cd-repo
           cd cd-repo
-          
-          git config user.name "CI Bot"
-          git config user.email "ci@bot.com"
 
-          # AWS 수정
+          git config user.name "Github Action"
+          git config user.email "action@github.com"
+
+          # [AWS Prod 수정]
           if [ -d "overlays/prod-aws" ]; then
             cd overlays/prod-aws
-            kustomize edit set image my-app-image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+            # kustomize로 이미지 태그 교체
+            kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
             cd ../..
           else
             echo "⚠️ AWS folder not found"
           fi
 
-          # GCP 수정
+          # [GCP DR 수정]
           if [ -d "overlays/prod-gcp" ]; then
             cd overlays/prod-gcp
-            kustomize edit set image my-app-image=$GAR_REGISTRY:$IMAGE_TAG
+            # kustomize로 이미지 태그 교체
+            kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$GAR_REGISTRY:$IMAGE_TAG
             cd ../..
           else
              echo "⚠️ GCP folder not found"
           fi
 
-          # 변경사항 푸시
+          # 변경사항 확인 및 푸시
           if [[ `git status --porcelain` ]]; then
             git add .
-            git commit -m "Deploy $IMAGE_TAG (AWS & GCP)"
+            git commit -m "🚀 Deploy Prod: $IMAGE_TAG (AWS & GCP)"
             git push
           else
-            echo "No changes to commit"
+            echo "✅ No changes to commit (Already up-to-date)"
           fi
