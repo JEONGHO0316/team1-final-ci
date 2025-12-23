@@ -3,9 +3,9 @@ name: Multi-Cloud Deploy (AWS & GCP)
 on:
   push:
     branches:
-     - "main"
+      - "main"      # 🟢 Dev 배포 트리거
     tags:
-      - 'v*'
+      - 'v*'        # 🔴 Prod 배포 트리거
 
 env:
   # 🔴 [설정] 리소스 이름 정의
@@ -14,9 +14,9 @@ env:
   GAR_REPOSITORY: gitactions-hjh
   GCP_REGION: asia-northeast3
   GITOPS_REPO: JEONGHO0316/team1-final-cd
-  
-  # 🔴 [중요] kustomization.yaml에 적어둔 가짜 이미지 이름(placeholder)과 똑같아야 함!
-  KUSTOMIZE_IMAGE_NAME: petclinic-image-placeholder 
+
+  # 🔴 [중요] kustomization.yaml에 적어둔 가짜 이미지 이름
+  KUSTOMIZE_IMAGE_NAME: petclinic-image-placeholder
 
 permissions:
   contents: read
@@ -35,12 +35,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 2. Maven 빌드 (실행 권한 문제 방지 위해 chmod 추가)
+      # 2. Maven 빌드
       - name: Build with Maven
-        run: | 
+        run: |
           mvn clean package -DskipTests
 
-      # 3. Kustomize 설치 (✅ 추가됨: 안전한 동작을 위해 필수)
+      # 3. Kustomize 설치
       - name: Setup Kustomize
         uses: imranismail/setup-kustomize@v2
 
@@ -56,7 +56,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 5. GCP 로그인
+      # 5. GCP 로그인 (GAR용)
       - name: Google Auth
         uses: google-github-actions/auth@v1
         with:
@@ -69,71 +69,98 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCP_SA_KEY }}
 
-      # 6. Docker 빌드 & Dual Push
-      - name: Build, Tag, and Push Image
+      # -----------------------------------------------------------
+      # 6. Docker 빌드 & Push (조건부 로직 적용)
+      # -----------------------------------------------------------
+      - name: Build and Push Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          # GAR 주소 조합 (Region-docker.pkg.dev/ProjectID/Repo/Image)
           GAR_REGISTRY: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.ECR_REPOSITORY }}
         run: |
-          # 태그 추출 (refs/tags/v1.0.0 -> v1.0.0)
-          IMAGE_TAG=${GITHUB_REF#refs/tags/}
-          echo "🚀 Deploy Target Version: $IMAGE_TAG"
+          # ✅ [수정] github.ref_name을 사용하여 슬래시(/) 에러 해결!
+          # main 브랜치면 -> "main"
+          # v1.0.0 태그면 -> "v1.0.0"
+          IMAGE_TAG=${{ github.ref_name }}
+          echo "🚀 Target Version: $IMAGE_TAG"
 
-          # Docker 빌드
+          # 1. Docker 빌드
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
 
-          # GCP용 태그 생성 (복사)
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $GAR_REGISTRY:$IMAGE_TAG
-
-          # AWS ECR 푸시
+          # 2. AWS ECR 푸시 (항상 수행)
           echo "📤 Pushing to AWS ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-          # GCP GAR 푸시
-          echo "📤 Pushing to GCP GAR..."
-          docker push $GAR_REGISTRY:$IMAGE_TAG
+          # 3. GCP GAR 푸시 (조건: 태그일 때만 수행)
+          if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
+            echo "🔥 [Prod Release] Pushing to GCP GAR for DR..."
+            docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $GAR_REGISTRY:$IMAGE_TAG
+            docker push $GAR_REGISTRY:$IMAGE_TAG
+          else
+            echo "💤 [Dev Build] Skip GCP Push (ECR Only)"
+          fi
 
-      # 7. GitOps Manifest 수정 (CD 트리거)
-      - name: Update GitOps Manifest
+      # -----------------------------------------------------------
+      # 7-A. Dev 배포 (Main 브랜치일 때만)
+      # -----------------------------------------------------------
+      - name: Update Dev Manifest (prod-dev)
+        if: github.ref == 'refs/heads/main'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_TAG=${{ github.ref_name }}
+          
+          # GitOps 레포 클론
+          git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ env.GITOPS_REPO }}.git cd-repo
+          cd cd-repo
+          git config user.name "Github Action"
+          git config user.email "action@github.com"
+
+          # Dev 폴더 수정
+          if [ -d "overlays/prod-dev" ]; then
+            cd overlays/prod-dev
+            kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+            
+            git commit -am "🟢 Deploy Dev: $IMAGE_TAG"
+            git push
+          else
+             echo "⚠️ 'overlays/prod-dev' folder not found!"
+          fi
+
+      # -----------------------------------------------------------
+      # 7-B. Prod 배포 (Tag일 때만)
+      # -----------------------------------------------------------
+      - name: Update Prod Manifest (AWS & GCP)
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           GAR_REGISTRY: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.ECR_REPOSITORY }}
         run: |
-          IMAGE_TAG=${GITHUB_REF#refs/tags/}
+          IMAGE_TAG=${{ github.ref_name }}
           
-          # GitOps 레포 클론 (GH_TOKEN 필수!)
           git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ env.GITOPS_REPO }}.git cd-repo
           cd cd-repo
-
           git config user.name "Github Action"
           git config user.email "action@github.com"
 
-          # [AWS Prod 수정]
+          # 1. AWS Prod 수정
           if [ -d "overlays/prod-aws" ]; then
             cd overlays/prod-aws
-            # kustomize로 이미지 태그 교체
-            kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+            kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
             cd ../..
-          else
-            echo "⚠️ AWS folder not found"
           fi
 
-          # [GCP DR 수정]
+          # 2. GCP DR 수정 (GAR 이미지 사용)
           if [ -d "overlays/prod-gcp" ]; then
             cd overlays/prod-gcp
-            # kustomize로 이미지 태그 교체
             kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$GAR_REGISTRY:$IMAGE_TAG
             cd ../..
-          else
-             echo "⚠️ GCP folder not found"
           fi
 
-          # 변경사항 확인 및 푸시
+          # 3. Push
           if [[ `git status --porcelain` ]]; then
             git add .
-            git commit -m "🚀 Deploy Prod: $IMAGE_TAG (AWS & GCP)"
+            git commit -m "🔴 Release Prod: $IMAGE_TAG (Multi-Cloud)"
             git push
           else
-            echo "✅ No changes to commit (Already up-to-date)"
+            echo "✅ Already up-to-date"
           fi
