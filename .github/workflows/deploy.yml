@@ -101,32 +101,47 @@ jobs:
       # -----------------------------------------------------------
       # 7-A. Dev 배포 (🛠️ 수정됨: 고유 태그 사용)
       # -----------------------------------------------------------
-      - name: Update Dev Manifest (prod-dev)
+      - name: Update Dev Manifest (dev)
         if: github.ref == 'refs/heads/main'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          # 🛠️ [수정 포인트 2] 위에서 만든 태그(main-해시)와 똑같이 다시 생성
+          # 1. 태그 생성 (main-커밋해시)
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
           IMAGE_TAG="main-${SHORT_SHA}"
+          echo "🎯 목표 태그: $IMAGE_TAG"
 
-          # GitOps 레포 클론
+          # 2. GitOps 레포 클론
           git clone https://${{ secrets.GH_TOKEN }}@github.com/${{ env.GITOPS_REPO }}.git cd-repo
           cd cd-repo
           git config user.name "Github Action"
           git config user.email "action@github.com"
 
-          # Dev 폴더 수정
-          if [ -d "overlays/prod-dev" ]; then
-            cd overlays/prod-dev
-            # 여기서 매번 다른 태그(main-xxxx)가 들어가므로 Git 변경사항이 발생함 -> ArgoCD 동작!
-            kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+          # 3. Dev 폴더 수정 (여기를 dev로 바꿨습니다!)
+          if [ -d "overlays/dev" ]; then
+            cd overlays/dev
+            
+            echo "📝 수정 전 파일 내용:"
+            cat kustomization.yaml
 
+            # 이미지 태그 변경
+            kustomize edit set image ${{ env.KUSTOMIZE_IMAGE_NAME }}=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+            
+            echo "✅ 수정 후 파일 내용:"
+            cat kustomization.yaml
+
+            # 4. 변경사항 커밋 & 푸시
             git commit -am "🟢 Deploy Dev: $IMAGE_TAG"
             git push
           else
-             echo "⚠️ 'overlays/prod-dev' folder not found!"
+             # 폴더가 진짜 dev가 맞는지 확인하기 위해 목록을 출력합니다.
+             echo "❌ [에러] 'overlays/dev' 폴더를 찾을 수 없습니다!"
+             echo "📂 현재 overlays 폴더 목록:"
+             ls -F ../
+             exit 1
           fi
+       
+
 
       # -----------------------------------------------------------
       # 7-B. Prod 배포 (Tag일 때만)
