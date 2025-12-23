@@ -1,171 +1,95 @@
-# Spring PetClinic Sample Application [![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml)[![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml)
+# 🚀 Petclinic Application & CI Pipeline
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/spring-projects/spring-petclinic) [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=7517918)
+[![Build Status](https://github.com/JEONGHO0316/team1-final-ci/actions/workflows/ci-pipeline.yaml/badge.svg)](https://github.com/JEONGHO0316/team1-final-ci/actions/workflows/ci-pipeline.yaml)
+![Java](https://img.shields.io/badge/Java-17-orange) ![Spring Boot](https://img.shields.io/badge/SpringBoot-3.0-green) ![Docker](https://img.shields.io/badge/Docker-Multi--Cloud-blue)
 
-## Understanding the Spring Petclinic application with a few diagrams
+안녕하세요! 이 저장소는 **MSA 기반 Petclinic 애플리케이션의 소스 코드**와 **Multi-Cloud CI 전략**을 담고 있습니다.
+단순한 빌드를 넘어, **운영 효율성**과 **재해 복구(DR)**를 고려하여 배포 시나리오를 이원화했습니다.
 
-See the presentation here:  
-[Spring Petclinic Sample Application (legacy slides)](https://speakerdeck.com/michaelisvy/spring-petclinic-sample-application?slide=20)
+---
 
-> **Note:** These slides refer to a legacy, pre–Spring Boot version of Petclinic and may not reflect the current Spring Boot–based implementation.  
-> For up-to-date information, please refer to this repository and its documentation.
+## 📂 Project Structure
+
+Spring Boot 애플리케이션 구조와 CI/CD 워크플로우 설정 파일이 포함되어 있습니다.
+
+```text
+.
+├── .github/                
+│   └── workflows/          
+│       └── deploy.yml   # ⚙️ 핵심: CI 파이프라인 (ECR / GAR 분기 처리)
+├── src/                    
+│   ├── main/
+│   │   ├── java/              # Backend Source Code
+│   │   └── resources/         # Application Configs
+│   └── test/                  # Unit Tests
+├── Dockerfile                 # Multi-stage Docker Build
+├── pom.xml                    # Maven Dependency Management
+└── README.md                  # Project Documentation
 
 
-## Run Petclinic locally
+---
 
-Spring Petclinic is a [Spring Boot](https://spring.io/guides/gs/spring-boot) application built using [Maven](https://spring.io/guides/gs/maven/) or [Gradle](https://spring.io/guides/gs/gradle/).
-Java 17 or later is required for the build, and the application can run with Java 17 or newer:
+🏗️ CI Architecture (Multi-Cloud Registry Strategy)
+비용 효율성과 안정성을 모두 잡기 위해 Git Event에 따라 파이프라인 동작을 다르게 설계했습니다.
 
-```bash
-git clone https://github.com/spring-projects/spring-petclinic.git
-cd spring-petclinic
-./mvnw package
-java -jar target/*.jar
+1. 🟢 Routine Dev (일반 개발)
+Trigger: git push (Feature/Main branch)
+
+Action: 개발 단계에서는 빠른 빌드와 테스트가 목적입니다.
+
+Target: AWS ECR에만 이미지를 업로드합니다.
+
+2. 🔴 Release & DR (운영 배포)
+Trigger: git tag push (e.g., v1.0.0)
+
+Action: 실제 운영 배포 및 재해 복구(DR) 대비용 이미지를 생성합니다.
+
+Target: AWS ECR + GCP GAR (Google Artifact Registry) 두 곳에 동시에 업로드합니다.
+
+Next Step: 업로드 완료 후, Ops Repo의 매니페스트를 자동으로 수정하여 ArgoCD 배포를 트리거합니다.
+
+---
+
+🚀 How to Use
+시나리오 A: 기능 개발 및 테스트
+코드를 수정하고 단순히 푸시하면 AWS ECR에 이미지가 빌드됩니다.
+
+```
+git add .
+git commit -m "Feat: 회원가입 로직 개선"
+git push origin main
 ```
 
-(On Windows, or if your shell doesn't expand the glob, you might need to specify the JAR file name explicitly on the command line at the end there.)
+시나리오 B: 정식 버전 릴리즈 (Multi-Cloud Push)
+검증된 코드를 운영 환경에 배포할 때는 태그를 붙여주세요. GCP까지 이미지가 복제됩니다.
+```
+# v로 시작하는 태그 생성
+git tag v1.0.2
 
-You can then access the Petclinic at <http://localhost:8080/>.
-
-<img width="1042" alt="petclinic-screenshot" src="https://cloud.githubusercontent.com/assets/838318/19727082/2aee6d6c-9b8e-11e6-81fe-e889a5ddfded.png">
-
-Or you can run it from Maven directly using the Spring Boot Maven plugin. If you do this, it will pick up changes that you make in the project immediately (changes to Java source files require a compile as well - most people use an IDE for this):
-
-```bash
-./mvnw spring-boot:run
+# 태그 푸시 -> CI가 ECR & GAR 업로드 및 Ops Repo 수정 수행
+git push origin v1.0.2
 ```
 
-> NOTE: If you prefer to use Gradle, you can build the app using `./gradlew build` and look for the jar file in `build/libs`.
+--- 
 
-## Building a Container
+🔑 CI Environment Secrets
+GitHub Actions가 클라우드 리소스에 접근하기 위해 아래의 Secret 키들이 설정되어야 합니다.
 
-There is no `Dockerfile` in this project. You can build a container image (if you have a docker daemon) using the Spring Boot build plugin:
-
-```bash
-./mvnw spring-boot:build-image
+```Key Name,Description
+AWS_ACCESS_KEY_ID,AWS ECR | 접근 권한
+AWS_SECRET_ACCESS_KEY,AWS | 시크릿 키
+GCP_CREDENTIALS_JSON,GCP GAR | 접근을 위한 Service Account Key (Base64 Encoded)
+ACTION_TOKEN,Ops Repo(GitOps) | 수정을 위한 Personal Access Token
 ```
 
-## In case you find a bug/suggested improvement for Spring Petclinic
+---
 
-Our issue tracker is available [here](https://github.com/spring-projects/spring-petclinic/issues).
+🧑‍💻 Engineer's Note (Retrospective)
+"왜 레지스트리를 두 곳이나 쓸까요?"
 
-## Database configuration
+처음에는 AWS ECR만 사용했지만, **"만약 AWS 서울 리전에 장애가 발생한다면?"**이라는 질문에서 이 아키텍처를 고안했습니다.
 
-In its default configuration, Petclinic uses an in-memory database (H2) which
-gets populated at startup with data. The h2 console is exposed at `http://localhost:8080/h2-console`,
-and it is possible to inspect the content of the database using the `jdbc:h2:mem:<uuid>` URL. The UUID is printed at startup to the console.
+평소 개발 시에는 속도를 위해 ECR만 사용하지만, 중요한 Release 버전은 GCP GAR에도 백업하여 Multi-Cloud DR(Disaster Recovery) 환경을 구축했습니다. 이를 통해 특정 클라우드 벤더의 장애 상황에서도 유연하게 대처할 수 있는 탄력적인 인프라를 지향합니다.
 
-A similar setup is provided for MySQL and PostgreSQL if a persistent database configuration is needed. Note that whenever the database type changes, the app needs to run with a different profile: `spring.profiles.active=mysql` for MySQL or `spring.profiles.active=postgres` for PostgreSQL. See the [Spring Boot documentation](https://docs.spring.io/spring-boot/how-to/properties-and-configuration.html#howto.properties-and-configuration.set-active-spring-profiles) for more detail on how to set the active profile.
-
-You can start MySQL or PostgreSQL locally with whatever installer works for your OS or use docker:
-
-```bash
-docker run -e MYSQL_USER=petclinic -e MYSQL_PASSWORD=petclinic -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=petclinic -p 3306:3306 mysql:9.5
-```
-
-or
-
-```bash
-docker run -e POSTGRES_USER=petclinic -e POSTGRES_PASSWORD=petclinic -e POSTGRES_DB=petclinic -p 5432:5432 postgres:18.1
-```
-
-Further documentation is provided for [MySQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/mysql/petclinic_db_setup_mysql.txt)
-and [PostgreSQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/postgres/petclinic_db_setup_postgres.txt).
-
-Instead of vanilla `docker` you can also use the provided `docker-compose.yml` file to start the database containers. Each one has a service named after the Spring profile:
-
-```bash
-docker compose up mysql
-```
-
-or
-
-```bash
-docker compose up postgres
-```
-
-## Test Applications
-
-At development time we recommend you use the test applications set up as `main()` methods in `PetClinicIntegrationTests` (using the default H2 database and also adding Spring Boot Devtools), `MySqlTestApplication` and `PostgresIntegrationTests`. These are set up so that you can run the apps in your IDE to get fast feedback and also run the same classes as integration tests against the respective database. The MySql integration tests use Testcontainers to start the database in a Docker container, and the Postgres tests use Docker Compose to do the same thing.
-
-## Compiling the CSS
-
-There is a `petclinic.css` in `src/main/resources/static/resources/css`. It was generated from the `petclinic.scss` source, combined with the [Bootstrap](https://getbootstrap.com/) library. If you make changes to the `scss`, or upgrade Bootstrap, you will need to re-compile the CSS resources using the Maven profile "css", i.e. `./mvnw package -P css`. There is no build profile for Gradle to compile the CSS.
-
-## Working with Petclinic in your IDE
-
-### Prerequisites
-
-The following items should be installed in your system:
-
-- Java 25 or newer (full JDK, not a JRE)
-- [Git command line tool](https://help.github.com/articles/set-up-git)
-- Your preferred IDE
-  - Eclipse with the m2e plugin. Note: when m2e is available, there is an m2 icon in `Help -> About` dialog. If m2e is
-  not there, follow the install process [here](https://www.eclipse.org/m2e/)
-  - [Spring Tools Suite](https://spring.io/tools) (STS)
-  - [IntelliJ IDEA](https://www.jetbrains.com/idea/)
-  - [VS Code](https://code.visualstudio.com)
-
-### Steps
-
-1. On the command line run:
-
-    ```bash
-    git clone https://github.com/spring-projects/spring-petclinic.git
-    ```
-
-1. Inside Eclipse or STS:
-
-    Open the project via `File -> Import -> Maven -> Existing Maven project`, then select the root directory of the cloned repo.
-
-    Then either build on the command line `./mvnw generate-resources` or use the Eclipse launcher (right-click on project and `Run As -> Maven install`) to generate the CSS. Run the application's main method by right-clicking on it and choosing `Run As -> Java Application`.
-
-1. Inside IntelliJ IDEA:
-
-    In the main menu, choose `File -> Open` and select the Petclinic [pom.xml](pom.xml). Click on the `Open` button.
-
-    - CSS files are generated from the Maven build. You can build them on the command line `./mvnw generate-resources` or right-click on the `spring-petclinic` project then `Maven -> Generates sources and Update Folders`.
-
-    - A run configuration named `PetClinicApplication` should have been created for you if you're using a recent Ultimate version. Otherwise, run the application by right-clicking on the `PetClinicApplication` main class and choosing `Run 'PetClinicApplication'`.
-
-1. Navigate to the Petclinic
-
-    Visit [http://localhost:8080](http://localhost:8080) in your browser.
-
-## Looking for something in particular?
-
-|Spring Boot Configuration | Class or Java property files  |
-|--------------------------|---|
-|The Main Class | [PetClinicApplication](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java) |
-|Properties Files | [application.properties](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources) |
-|Caching | [CacheConfiguration](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java) |
-
-## Interesting Spring Petclinic branches and forks
-
-The Spring Petclinic "main" branch in the [spring-projects](https://github.com/spring-projects/spring-petclinic)
-GitHub org is the "canonical" implementation based on Spring Boot and Thymeleaf. There are
-[quite a few forks](https://spring-petclinic.github.io/docs/forks.html) in the GitHub org
-[spring-petclinic](https://github.com/spring-petclinic). If you are interested in using a different technology stack to implement the Pet Clinic, please join the community there.
-
-## Interaction with other open-source projects
-
-One of the best parts about working on the Spring Petclinic application is that we have the opportunity to work in direct contact with many Open Source projects. We found bugs/suggested improvements on various topics such as Spring, Spring Data, Bean Validation and even Eclipse! In many cases, they've been fixed/implemented in just a few days.
-Here is a list of them:
-
-| Name | Issue |
-|------|-------|
-| Spring JDBC: simplify usage of NamedParameterJdbcTemplate | [SPR-10256](https://github.com/spring-projects/spring-framework/issues/14889) and [SPR-10257](https://github.com/spring-projects/spring-framework/issues/14890) |
-| Bean Validation / Hibernate Validator: simplify Maven dependencies and backward compatibility |[HV-790](https://hibernate.atlassian.net/browse/HV-790) and [HV-792](https://hibernate.atlassian.net/browse/HV-792) |
-| Spring Data: provide more flexibility when working with JPQL queries | [DATAJPA-292](https://github.com/spring-projects/spring-data-jpa/issues/704) |
-
-## Contributing
-
-The [issue tracker](https://github.com/spring-projects/spring-petclinic/issues) is the preferred channel for bug reports, feature requests and submitting pull requests.
-
-For pull requests, editor preferences are available in the [editor config](.editorconfig) for easy use in common text editors. Read more and download plugins at <https://editorconfig.org>. All commits must include a __Signed-off-by__ trailer at the end of each commit message to indicate that the contributor agrees to the Developer Certificate of Origin.
-For additional details, please refer to the blog post [Hello DCO, Goodbye CLA: Simplifying Contributions to Spring](https://spring.io/blog/2025/01/06/hello-dco-goodbye-cla-simplifying-contributions-to-spring).
-
-## License
-
-The Spring PetClinic sample application is released under version 2.0 of the [Apache License](https://www.apache.org/licenses/LICENSE-2.0).
+---
+Created by [ 홍 정 호 ], KDT DevOps Engineering Student.
