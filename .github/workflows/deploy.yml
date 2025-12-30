@@ -139,10 +139,10 @@ jobs:
           fields: repo,ref,workflow
           custom_payload: |
             {
-              "text": "🚀 운영(Prod) 배포 승인 대기 중!",
+              "text": " 운영(Prod) 배포 승인 대기 중!",
               "attachments": [{
                 "color": "warning",
-                "text": "버전: ${{ needs.ci-build.outputs.image_tag }}\nECR 및 GAR 업로드 완료.\n\n아래 링크에서 [Review deployments] -> [Approve]를 눌러주세요.\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|👉 승인하러 가기>"
+                "text": "버전: ${{ needs.ci-build.outputs.image_tag }}\nECR 및 GAR 업로드 완료.\n\n아래 링크로 이동 하여 승인을 눌러주세요 .\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}| ! 승인하러 가기 !>"
               }]
             }
         env:
