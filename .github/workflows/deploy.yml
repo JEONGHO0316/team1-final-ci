@@ -21,7 +21,7 @@ permissions:
 jobs:
   # ====================================================
   # JOB 1: 빌드 및 이미지 푸시 (공통)
-  # ====================================================
+
   ci-build:
     runs-on: ubuntu-latest
     # 다음 Job들에게 변수를 넘겨주기 위한 output 설정
@@ -94,7 +94,7 @@ jobs:
 
   # ====================================================
   # JOB 2: Dev 환경 배포 (Main 브랜치일 때만)
-  # ====================================================
+
   deploy-dev:
     needs: ci-build
     if: github.ref == 'refs/heads/main'
@@ -126,7 +126,7 @@ jobs:
 
   # ====================================================
   # JOB 3: Slack 알림 (Tag일 때만)
-  # ====================================================
+
   notify-slack:
     needs: ci-build
     if: startsWith(github.ref, 'refs/tags/')
@@ -150,7 +150,7 @@ jobs:
 
   # ====================================================
   # JOB 4: Prod 환경 배포 (승인 후 실행)
-  # ====================================================
+
   deploy-prod:
     needs: [ci-build, notify-slack]
     if: startsWith(github.ref, 'refs/tags/')
@@ -197,3 +197,26 @@ jobs:
           else
             echo "✅ Already up-to-date"
           fi
+      - name: Notify Slack - CD Success
+        if: success() # 앞선 배포 단계가 성공했을 때만 실행
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: repo,ref,workflow
+          custom_payload: |
+            {
+              "attachments": [{
+                "color": "#36a64f",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "✅ *배포(CD) 완료! ArgoCD가 곧 동기화합니다.*"
+                    }
+                  }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
